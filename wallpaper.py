@@ -26,7 +26,7 @@ class StartThread(Thread):
     def comparison(self, img, mode_lab_color, pixel_width):
         compared_pixels = 0
         for pixel_height in range(0, img.height-1, self.pixel_group):
-            r, g, b, a = img.getpixel((pixel_width, pixel_height))
+            r, g, b, _ = img.getpixel((pixel_width, pixel_height))
             lab_pixel_color = convert_color(sRGBColor(r, g, b), LabColor)
             if delta_e_cie2000(lab_pixel_color, mode_lab_color) <= self.check_value:
                 compared_pixels += 1
@@ -128,7 +128,7 @@ class Main():
         conn.close()
 
         all_files = []
-        for path, subdirs, files in os.walk(start_folder):
+        for path, _, files in os.walk(start_folder):
             for name in files:
                 fpath = os.path.join(path, name)
                 if fpath not in db_files:

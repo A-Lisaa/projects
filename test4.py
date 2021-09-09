@@ -1,5 +1,4 @@
-#-*- coding: utf-8 -*-
-a = {2: 60, 4: 45, 8: 30, 16: 15, 32: 0}
-for i in range(1, 20):
-    a[2**(i+5)] = 360-15*i
-print(a)
+import requests
+
+for i in range(20):
+    print(requests.get(f"https://ws.audioscrobbler.com/2.0/?method=user.getlovedtracks&user=DvaChe59&page={i}&api_key=5b786ecb2cbb8a330422ab32b84be32e", headers={"user-agent":"loved_tracks_copier"}).text)
