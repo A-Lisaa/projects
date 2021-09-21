@@ -8,7 +8,6 @@ import random
 import pygame
 from pygame.locals import *
 from configparser import ConfigParser
-
 pygame.init()
 
 class Settings:
@@ -114,7 +113,7 @@ class Game(Settings):
         Settings.update_setting(self, "In-game", "showable_tiles", "[]")
         Settings.update_setting(self, "In-game", "do_show_everything", "False")
 
-    def wait_for_press(self):
+    def button_pressed(self):
         while True:
             for event in pygame.event.get():
                 if event.type == KEYDOWN or event.type == MOUSEBUTTONDOWN or event.type == QUIT:
@@ -136,12 +135,15 @@ class Game(Settings):
         for xy in self.tiles_places:
             x, y = xy
             danger_level = 0
-            danger_level_positions = [(x + self.tile_size, y), (x, y + self.tile_size),
-                                      (x - self.tile_size, y), (x, y - self.tile_size),
+            danger_level_positions = [(x + self.tile_size, y),
+                                      (x - self.tile_size, y),
+                                      (x, y + self.tile_size),
+                                      (x, y - self.tile_size),
                                       (x + self.tile_size, y + self.tile_size),
-                                      (x - self.tile_size, y - self.tile_size),
                                       (x + self.tile_size, y - self.tile_size),
-                                      (x - self.tile_size, y + self.tile_size)]
+                                      (x - self.tile_size, y - self.tile_size),
+                                      (x - self.tile_size, y + self.tile_size)
+                                      ]
 
             for danger_level_position in danger_level_positions:
                 if danger_level_position in self.chords:
@@ -179,15 +181,33 @@ class Game(Settings):
                     mouse = pygame.mouse.get_pos()
                     mouse = (mouse[0] - mouse[0] % self.tile_size, mouse[1] - mouse[1] % self.tile_size)
                     if event.button == 1 and mouse not in flags and mouse not in shown:
-                        self.scr.blit(self.tiles, mouse, (self.tile_positions[self.chords[mouse]][0], self.tile_positions[self.chords[mouse]][1], self.tile_size, self.tile_size))
-                        shown.append(mouse)
                         if self.chords[mouse] == "tile_mine":
                             self.write_text("Мина взорвалась", self.screen_width//2, self.screen_height//2 - int(self.screen_width//2 // (len("Мина взорвалась")//1.75)) - self.screen_height*0.05, self.screen_width*0.9)
                             self.write_text("Нажмите любую кнопку для выхода", self.screen_width//2, self.screen_height//2 - int(self.screen_width//2 // (len("Нажмите любую кнопку для выхода")//1.75)) + self.screen_height*0.05, self.screen_width*0.9)
                             pygame.display.update()
-                            if self.wait_for_press():
+                            if self.button_pressed():
                                 pygame.quit()
                                 sys.exit()
+                        if self.chords[mouse] == "tile_0":
+                            possible_positions = [(mouse[0] + self.tile_size, mouse[1]),
+                                                  (mouse[0] - self.tile_size, mouse[1]),
+                                                  (mouse[0], mouse[1] + self.tile_size),
+                                                  (mouse[0], mouse[1] - self.tile_size),
+                                                  (mouse[0] + self.tile_size, mouse[1] + self.tile_size),
+                                                  (mouse[0] + self.tile_size, mouse[1] - self.tile_size),
+                                                  (mouse[0] - self.tile_size, mouse[1] - self.tile_size),
+                                                  (mouse[0] - self.tile_size, mouse[1] + self.tile_size)
+                                                  ]
+                            self.scr.blit(self.tiles, mouse, (self.tile_positions[self.chords[mouse]][0], self.tile_positions[self.chords[mouse]][1], self.tile_size, self.tile_size))
+                            shown.append(mouse)
+                            
+                            for position in possible_positions:
+                                if position in ("tile_0", "tile_1", "tile_2", "tile_3", "tile_4", "tile_5", "tile_6", "tile_7", "tile_8"):
+                                    self.scr.blit(self.tiles, position, (self.tile_positions[self.chords[position]][0], self.tile_positions[self.chords[position]][1], self.tile_size, self.tile_size))
+                                    shown.append(position)
+                        else:
+                            self.scr.blit(self.tiles, mouse, (self.tile_positions[self.chords[mouse]][0], self.tile_positions[self.chords[mouse]][1], self.tile_size, self.tile_size))
+                            shown.append(mouse)
                     elif event.button == 3 and mouse not in shown:
                         if mouse not in flags:
                             self.scr.blit(self.tiles, mouse, (self.tile_positions["tile_flag"][0], self.tile_positions["tile_flag"][1], self.tile_size, self.tile_size))
@@ -200,7 +220,7 @@ class Game(Settings):
                 self.write_text("Мины обезврежены", self.screen_width//2, self.screen_height//2 - int(self.screen_width//2 // (len("Мины обезврежены")//1.75)) - self.screen_height*0.05, self.screen_width*0.9)
                 self.write_text("Нажмите любую кнопку для выхода", self.screen_width//2, self.screen_height//2 - int(self.screen_width//2 // (len("Нажмите любую кнопку для выхода")//1.75)) + self.screen_height*0.05, self.screen_width*0.9)
                 pygame.display.update()
-                if self.wait_for_press():
+                if self.button_pressed():
                     pygame.quit()
                     sys.exit()
 

@@ -1,5 +1,5 @@
 import os
-import imghdr
+import hashlib
 import shutil
 import statistics
 import time
@@ -22,6 +22,13 @@ class StartThread(Thread):
 
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
         self.cur = self.conn.cursor()
+        
+    def get_file_md5(self, fname):
+        hash_md5 = hashlib.md5()
+        with open(fname, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+        return hash_md5.hexdigest()
 
     def comparison(self, img, mode_lab_color, pixel_width):
         compared_pixels = 0
@@ -73,13 +80,14 @@ class StartThread(Thread):
             except Exception:
                 monochrome = -1
 
+            md5 = self.get_file_md5(file)
             resolution = img.width/img.height
             current_time = time.localtime()
             addition_date = time.strftime("%d.%m.%Y", current_time)
             addition_time = time.strftime("%H:%M:%S", current_time)
 
-            values = (file, img.width, img.height, resolution, monochrome, self.check_value, addition_date, addition_time)
-            self.cur.execute("INSERT INTO files VALUES(?, ?, ?, ?, ?, ?, ?, ?);", values)
+            values = (md5, file, img.width, img.height, resolution, monochrome, self.check_value, addition_date, addition_time)
+            self.cur.execute("INSERT INTO files VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);", values)
             self.conn.commit()
             print(f"{self.name} CHECKED {file} ({StartThread.counter}/{len(StartThread.files)})\n", end="")
             StartThread.counter += 1
@@ -110,8 +118,10 @@ class Main():
         conn = sqlite3.connect(self.db_name, check_same_thread=False)
         cur = conn.cursor()
 
+        # TODO: md5 instead of path as key, path is needed but not as key
         cur.execute("""CREATE TABLE IF NOT EXISTS files(
-            path TEXT PRIMARY KEY,
+            md5 TEXT PRIMARY KEY,
+            path TEXT,
             width INT,
             height INT,
             resolution INT,
@@ -136,7 +146,6 @@ class Main():
         files_length = len(all_files)
 
         StartThread.files = all_files
-        StartThread.entered_amount = files_length
 
         if files_length < threads_amount:
             threads_amount = files_length
@@ -160,7 +169,7 @@ class Main():
             columns_types.append(convert_types_dict[item[2].upper()])
 
         cur.execute("SELECT * FROM files ORDER BY path ASC;")
-        for file in cur.fetchall():
+        for file in cur.fetchall(): # TODO: md5 implementation
             file = list(file)
             file[0] = file[0].replace("\\", "/")
             for i, cell in enumerate(file):

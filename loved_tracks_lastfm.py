@@ -129,7 +129,7 @@ class Parser():
 
     def copy_music_files(self):
         """
-        Tries to copy Loved Tracks from start_path
+        Copies Loved Tracks from start_path
         """
         problems = {}
         songs = self.get_songs()

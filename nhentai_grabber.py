@@ -1,155 +1,190 @@
 #-*- coding: utf-8 -*-
 print("Preparing for parsing")
 
-from os import makedirs
-from os.path import exists
-from sys import exit
-from time import time, sleep
-from re import search
-from fake_useragent import UserAgent
-from requests import get
+import os
+import time
+import requests
+from typing import Callable, Union
 from bs4 import BeautifulSoup
 
+"""
+Downloads manga and doujinsi from nhentai.net.
+Gets and downloads tags of a manga.
+
+Usage:
+1) Make an instance of Grabber
+2) Call method 'run'
+"""
+# TODO: Problems may occur when manga name is too long
+
 class Grabber:
-    def __init__(self):
-        self.page_name = "" # name of the main page with hentai (nhentai.net/g/666666)
-        self.root_folder = "" # folder for pics
-        self.try_counts = -1 # amount of downloading tries if failed, values below 0 mean infinity
-        self.trying_time = 3 # to prevent fast retries, they can not be done more often than this value
+    class Decorators:
+        """
+        Class for decorators
+        """
+        @classmethod
+        def connecter(cls, func: Callable):
+            """
+            Tries to connect ot website
 
-    def replace_denied_marks(self, name):
+            Args:
+                func (Callable): function to retry
+            """
+            def wrapper(self, *args, **kwargs):
+                try:
+                    result = func(self, *args, **kwargs)
+                except requests.RequestException:
+                    try_counter = self.try_counts
+                    while try_counter != 0:
+                        try_counter -= 1
+                        try:
+                            result = func(self, *args, **kwargs)
+                            break
+                        except requests.RequestException:
+                            if self.try_counts > 0:
+                                print(f"Error, trying again, left {try_counter} attempt(s)")
+                                
+                                start_time = time.time()
+                                if int(time.time() - start_time) < self.trying_time:
+                                    time.sleep(self.trying_time - time.time() + start_time)
+                            elif self.try_counts == 0:
+                                print("Error")
+                                
+                                result = None
+                            elif self.try_counts < 0:
+                                print("Error, trying again")
+                                
+                                start_time = time.time()
+                                if int(time.time() - start_time) < self.trying_time:
+                                    time.sleep(self.trying_time - time.time() + start_time)
+                return result
+            return wrapper
+    
+    def __init__(self, folder: str, try_counts: int = -1, trying_time: int = 3, tags_delimiter: str = "; ", tags_file: str = "tags.txt"):
+        """
+        Downloads doujinsis from nhentai.net
+
+        Args:
+            folder (str): folder to save doujinsi
+            try_counts (int, optional): amount of downloading tries if failed, values below 0 mean infinity. Defaults to -1.
+            trying_time (int, optional): to prevent fast retries, they can not be done more often than this value. Defaults to 3.
+            tags_delimiter (str, optional): delimiter to split tags in one group. Defaults to "; "
+            tags_file (str, optional): name of a file with tags. Defaults to "tags.txt"
+        """
+        self.folder = folder
+        self.try_counts = try_counts
+        self.trying_time = trying_time
+        self.tags_delimiter = tags_delimiter
+        self.tags_file = tags_file
+
+    def replace_denied_marks(self, string: str) -> str:
+        """
+        Replaces characters denied by windows with their % analog
+
+        Args:
+            string (str): string with denied marks
+
+        Returns:
+            str: string with replaced denied marks
+        """
         denied_marks = {"/":"%2F", "\\":"%5C", "*":"%2A", ":":"%3A", "?":"%3F", "\"":"%22", "<":"%3C", ">":"%3E", "|":"%7C"}
-        for mark in denied_marks:
-             name = name.replace(mark, denied_marks[mark])
-        return name
-
-    def page_soup(self, link):
-        while True:
-            try:
-                soup = BeautifulSoup(get(link).content, "html.parser")
-                return soup
-            except:
-                pass
         
-    def get_tags(self, link):
-        self.tags_dict = {"Name":"", "ID":"", "Parodies":"", "Characters":"", "Tags":"", "Artists":"", "Groups":"", "Languages":"", "Categories":"", "Pages":""}
-        self.tags_soup = self.page_soup(link)
-        tags = self.tags_soup.select("div.tag-container")
-        self.tags_dict["Name"] += self.tags_soup.select("h1.title")[0].text
-        self.tags_dict["ID"] += self.tags_soup.select("#gallery_id")[0].text[1:]
-        for tag in tags:
-            for name in str(tag).split('<span class="name">')[1:]:
-                self.tags_dict[str(tag).split(">")[1].split("<")[0].strip()[:-1]] += f'{name.split("</span>")[0]}; '
-        return self.tags_dict
+        for mark in denied_marks:
+            string = string.replace(mark, denied_marks[mark])
+            
+        return string
+
+    @Decorators.connecter
+    def get_soup(self, link: str) -> Union[BeautifulSoup, None]:
+        """
+        Gets BeautifulSoup of a page
+
+        Args:
+            link (str): link to the webpage
+
+        Returns:
+            Union[BeautifulSoup, None]: BeautifulSoup if connecting is succesful, else None
+        """
+        return BeautifulSoup(requests.get(link).content, "html.parser")
+        
+    def get_tags(self, soup: BeautifulSoup) -> dict:
+        """
+        Gets tags of a doujinsi
+
+        Args:
+            soup (BeautifulSoup): BeautifulSoup of the doujinsi page
+
+        Returns:
+            dict: dictionary with tags in format "Name":"%name%", "ID":"%id%", etc.
+        """
+        tags = {"ID":"", "Name":"", "Parodies":"", "Characters":"", "Tags":"", "Artists":"", "Groups":"", "Languages":"", "Categories":"", "Pages":""}
+        
+        tags["Name"] += soup.select("h1.title")[0].text
+        tags["ID"] += soup.select("#gallery_id")[0].text[1:] # From 1 because the first char is # (#123456)
+        for tag_container in soup.select("div.tag-container")[:-1]: # To -1 because the last tag is Uploaded
+            for name in tag_container.select("span.name"):
+                tags[tag_container.contents[0].strip()[:-1]] += name.text.strip() + self.tags_delimiter # To -1 because the last char is : (Pages:)
+        
+        return tags
                 
-    def record_in_file(self, link):
-        name = self.tags_soup.find('h1', {'class':'title'}).text
-        name = self.replace_denied_marks(name)
-        if len(name) > 200:
-            name = f"{name[:150]}$NEVL"
-        path = f"F:\\H\\{name}"
-        if not exists(path):
-            makedirs(path)
-        with open(f"{path}\\{name}.txt", "w", encoding = "utf-8") as f:
-            for tag in self.tags_dict:
-                f.write(f"{tag}: {self.tags_dict.get(tag)}".strip())
-                f.write("\n")
-        print(f"{name} tag(s) SAVED TO {path}")
-
-    def valid_checking(self):
+    @Decorators.connecter
+    def download_page(self, link: str, manga_folder: str):
         """
-        Checks self.page_name for nhentai link validity and self.root_folder for folder validity with regular expressions, 
-        replaces \ with /, removes / from ends, tries to convert self.try_counts to int
+        Downloads one page of manga
+
+        Args:
+            link (str): link to a page
+            manga_folder (str): folder in which the page will be downloaded
         """
-        self.page_name = self.page_name.replace("\\", "/")
-        if self.page_name.endswith("/"):
-            self.page_name = self.page_name[0:-1]
-        if not search(r"https:\/\/nhentai\.net\/g\/\d+", self.page_name):
-            print(f"self.page_name ({self.page_name}) is not valid")
-            exit()
+        with open(f"{manga_folder}\\{link.split('/')[-1]}", "wb") as f:
+            f.write(requests.get(link).content)
+        
+    def manga_page_parser(self, link: str, first_page: int = 1, last_page: int = None):
+        """
+        Parses manga page and downloads pics and tags
 
-        self.root_folder = self.root_folder.replace("\\", "/")
-        if self.root_folder.endswith("/"):
-            self.root_folder = self.root_folder[0:-1]
-        if not search(r"\w:.+", self.root_folder):
-            print(f"self.root_folder ({self.root_folder}) is not valid")
-            exit()
+        Args:
+            link (str): link to a manga page
+            first_page (int, optional): first page of a manga to download. Defaults to 1.
+            last_page (int, optional): last page of manga to download. Defaults to None.
+        """
+        soup = self.get_soup(link)
+        tags = self.get_tags(soup)
+        if last_page is None:
+            last_page = int(tags["Pages"].strip("; ")) + 1
+        manga_folder = f"{self.folder}\\{self.replace_denied_marks(tags['Name'])}"
+        if not os.path.exists(manga_folder):
+            os.makedirs(manga_folder)
+        
+        # Downloads pages from first_page to last_page
+        for img in soup.select("img.lazyload")[first_page:last_page+1]: # From 1 because of cover, to Pages+1 because of Thumbs
+            data_src = img.attrs['data-src'].split('/')
+            page, extension = os.path.splitext(data_src[-1])
+            img_link = f"https://i.nhentai.net/galleries/{data_src[-2]}/{page[:-1]}{extension}"
+            
+            self.download_page(img_link, manga_folder)
+            
+            # Adds manga ID to the end of each picture code
+            with open(f"{manga_folder}\\{page[:-1]}{extension}", "a") as f:
+                f.write(f"\nID:{tags['ID']}")
+               
+            print(f"{img_link} SAVED TO {manga_folder}")
+            
+        # Writes tags to a file
+        with open(f"{manga_folder}\\{self.tags_file}", "w", encoding = "utf-8") as f:
+            for tag in tags:
+                f.write(f"{tag}: {tags.get(tag).strip()}\n")
+                
+    def run(self, link: str):
+        """
+        Main method, call this with manga link as an argument.
 
-        try:
-            int(self.try_counts)
-        except TypeError:
-            print(f"self.try_counts is not valid ({self.try_counts}), should be convertable to a number")
+        Args:
+            link (str): link to a manga page
+        """
+        self.manga_page_parser(link)
 
-        try:
-            int(self.trying_time)
-        except TypeError:
-            print(f"self.trying_time is not valid ({self.trying_time}), should be convertable to a number")
-
-    def work(self):
-        '''
-        Main method, makes folders, downloads pics
-        '''
-        self.valid_checking()
-
-        extensions = []
-        soup = BeautifulSoup(get(f"{self.page_name}").content, "html.parser")
-        name = soup.find('h1', {'class':'title'}).text
-        name = self.replace_denied_marks(name)
-        name_for_folder = name
-        if len(name_for_folder) > 200:
-            name_for_folder = f"{name[:200]}$NEVL"
-        folder = f"{self.root_folder}/{name_for_folder}"
-        if not exists(folder):
-            makedirs(folder)
-        if len(name) > 200:
-            with open(f"{folder}/full_name.txt", "w") as fname:
-                fname.write(name)
-        images_number = search(r"\d+", soup.find("img", {"class":"lazyload"})["data-src"]).group()
-
-        for ext in soup.findAll("img", {"class":"lazyload"}):
-            if search(rf"https:\/\/t\.nhentai\.net\/galleries\/{images_number}\/\d+t\..+", ext["data-src"]):
-                extensions.append(ext["data-src"].split(".")[-1])
-
-        for page in range(1, int(soup.findAll("span", {"class":"name"})[-1].text)+1):
-            extension = extensions[page-1]
-            link = f"https://i.nhentai.net/galleries/{images_number}/{page}.{extension}"
-            try:
-                with open(f"{folder}/{page}.{extension}", "wb") as code:
-                    code.write(get(link).content)
-                with open(f"{folder}/{page}.{extension}", "a") as code:
-                    code.write(f"\nID:{self.tags_dict['ID']}")
-                print(f"{link} SAVED TO {folder}")
-            except Exception:
-                try_counter = self.try_counts
-                while try_counter != 0:
-                    try_counter -= 1
-                    try:
-                        with open(f"{folder}/{page}.{extension}", "wb") as code:
-                            code.write(get(link).content)
-                        with open(f"{folder}/{page}.{extension}", "a") as code:
-                            code.write(f"\nID:{self.tags_dict['ID']}")
-                        print(f"{link} SAVED TO {folder}")
-                        break
-                    except Exception:
-                        if self.try_counts > 0:
-                            print(f"Downloading error, trying again, left {try_counter} attempt(s)")
-                            start_time = time()
-                            if int(time() - start_time) < self.trying_time:
-                                sleep(self.trying_time - time() + start_time)
-                        elif self.try_counts == 0:
-                            print("Downloading error")
-                        elif self.try_counts < 0:
-                            print("Downloading error, trying again")
-                            start_time = time()
-                            if int(time() - start_time) < self.trying_time:
-                                sleep(self.trying_time - time() + start_time)
-
-grabber = Grabber()
-grabber.root_folder = "F:\\H"
-
-with open("E:\\Secret Info\\Файлы\\Циферки.txt") as file:
-    for line in file:
-        grabber.get_tags(line)
-        grabber.record_in_file(line)
-        grabber.page_name = line
-        grabber.work()
+if __name__ == "__main__":
+    grabber = Grabber("F:\\H")
+    for manga in open("E:\\Secret Info\\Файлы\\Циферки.txt"):
+        grabber.run(manga.strip())
