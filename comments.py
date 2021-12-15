@@ -1,6 +1,5 @@
 from urllib.parse import unquote
 from requests import get
-from fake_useragent import UserAgent
 from bs4 import BeautifulSoup
 
 class Parser:

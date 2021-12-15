@@ -3,7 +3,6 @@
 
 import os
 import sys
-import ctypes
 import random
 import pygame
 from pygame.locals import *

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
+# pylint: disable = line-too-long, fixme, too-many-arguments, too-few-public-methods
 import os
 import time
+
 import requests
 from bs4 import BeautifulSoup
 
@@ -22,6 +24,7 @@ class Grabber:
     """
     Main class, see file docstring
     """
+
     class Decorators:
         """
         Class for decorators
@@ -83,7 +86,8 @@ class Grabber:
         self.tags_delimiter = tags_delimiter
         self.tags_file = tags_file
 
-    def replace_denied_marks(self, string: str) -> str:
+    @staticmethod
+    def replace_denied_marks(string: str) -> str:
         """
         Replaces characters denied by windows with their % analog
 
@@ -101,8 +105,9 @@ class Grabber:
 
         return string
 
+    @staticmethod
     @Decorators.connecter
-    def get_soup(self, link: str) -> BeautifulSoup | None:
+    def get_soup(link: str) -> BeautifulSoup | None:
         """
         Gets BeautifulSoup of a page
 
@@ -135,8 +140,9 @@ class Grabber:
 
         return tags
 
+    @staticmethod
     @Decorators.connecter
-    def download_page(self, link: str, manga_folder: str):
+    def download_page(link: str, manga_folder: str):
         """
         Downloads one page of manga
 
@@ -194,5 +200,6 @@ class Grabber:
 
 if __name__ == "__main__":
     grabber = Grabber("F:\\H")
-    for manga in open("E:\\Secret Info\\Файлы\\Циферки.txt", encoding = "utf-8"):
-        grabber.run(manga.strip())
+    with open("E:\\Secret Info\\Файлы\\Циферки.txt", encoding = "utf-8") as manga_file:
+        for manga in manga_file:
+            grabber.run(manga.strip())
