@@ -225,5 +225,5 @@ class Solver:
 
 if __name__ == "__main__":
     solver = Solver()
-    solver.print_solution((line for line in open("./quadratic_equations.txt", encoding="utf-8")))
-    #solver.print_solution(("5х2-25 = 0",))
+    #solver.print_solution((line for line in open("./quadratic_equations.txt", encoding="utf-8")))
+    solver.print_solution(("4x2 + 14x = 0.5",))

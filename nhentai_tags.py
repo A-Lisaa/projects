@@ -1,12 +1,14 @@
 print("Preparing for parsing")
 from os import listdir, makedirs, system
 from os.path import exists
-from sys import argv
 from re import match
+from sys import argv
 from urllib.parse import quote_plus, unquote
+
+from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
 from requests import get
-from bs4 import BeautifulSoup
+
 
 class Parser:
     language = ""
@@ -31,20 +33,17 @@ class Parser:
         return name
 
     def get_manga_language(self, name):
-        if "[English]" or "(English)" in name:
+        if "[English]" in name or "(English)" in name:
             return "en"
-        elif "[Chinese]" or "(Chinese)" in name:
+        if "[Chinese]" in name or "(Chinese)" in name:
             return "ch"
-        elif "[Japanese]" or "(Japanese)" in name:
+        if "[Japanese]" in name or "(Japanese)" in name:
             return "jp"
 
     def create_soup(self, link):
         while True:
-            try:
-                soup = BeautifulSoup(get(link).content, "html.parser")
-                return soup
-            except:
-                pass # it's done
+            soup = BeautifulSoup(get(link).content, "html.parser")
+            return soup
 
     def find_manga_search(self, search_link):
         while True:
